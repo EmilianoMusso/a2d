@@ -16,12 +16,12 @@ namespace a2d
             var rootCommand = new RootCommand("a2d help");
             rootCommand.AddOption(fileOption);
 
-            rootCommand.SetHandler((file) => ConvertToDockerEnv(file!), fileOption);
+            rootCommand.SetHandler(async(file) => await ConvertToDockerEnv(file!), fileOption);
 
             return await rootCommand.InvokeAsync(args);
         }
 
-        static void ConvertToDockerEnv(string appSettingFile)
+        static async Task ConvertToDockerEnv(string appSettingFile)
         {
             if (string.IsNullOrEmpty(appSettingFile)) 
             {
@@ -36,36 +36,34 @@ namespace a2d
                 return;
             }
 
-            var contents = File.ReadAllText(appSettingFile);
+            var contents = await File.ReadAllTextAsync(appSettingFile);
 
             var builder = new ConfigurationBuilder();
 
             using var stream = new MemoryStream(contents.Length);
             using var sw = new StreamWriter(stream);
 
-            sw.Write(contents);
-            sw.Flush();
+            await sw.WriteAsync(contents);
+            await sw.FlushAsync();
             stream.Position = 0;
 
             builder.AddJsonStream(stream);
 
-            var configurationRoot = builder.Build();
-
-            var keyPairs = configurationRoot
+            var keyPairs = builder.Build()
                 .AsEnumerable()
                 .Where(pair => !string.IsNullOrEmpty(pair.Value))
                 .OrderBy(pair => pair.Key);
 
             var convertedSettings = new StringBuilder();
 
-            foreach ((string key, string value) in keyPairs)
+            foreach ((string key, string? value) in keyPairs)
             {
-                string key2 = key.Replace(":", "__");
-                convertedSettings.AppendFormat("{0}={1}", key2, value);
-                convertedSettings.AppendLine();
+                convertedSettings
+                    .AppendFormat("{0}={1}", key.Replace(":", "__"), value)
+                    .AppendLine();
             }
 
-            Console.Write(convertedSettings.ToString());
+            await Console.Out.WriteAsync(convertedSettings.ToString());
         }
 
     }
