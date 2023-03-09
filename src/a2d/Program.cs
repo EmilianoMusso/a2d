@@ -13,15 +13,21 @@ namespace a2d
                 description: "The appsettings.json file to convert",
                 getDefaultValue: () => "");
 
+            var emptyOption = new Option<bool>(
+                name: "--empty",
+                description: "Export empty-valued settings",
+                getDefaultValue: () => false);
+
             var rootCommand = new RootCommand("a2d help");
             rootCommand.AddOption(fileOption);
+            rootCommand.AddOption(emptyOption);
 
-            rootCommand.SetHandler(async(file) => await ConvertToDockerEnv(file!), fileOption);
+            rootCommand.SetHandler(async(file, empty) => await ConvertToDockerEnv(file!, empty!), fileOption, emptyOption);
 
             return await rootCommand.InvokeAsync(args);
         }
 
-        static async Task ConvertToDockerEnv(string appSettingFile)
+        static async Task ConvertToDockerEnv(string appSettingFile, bool exportEmptyParams)
         {
             if (string.IsNullOrEmpty(appSettingFile)) 
             {
@@ -51,19 +57,14 @@ namespace a2d
 
             var keyPairs = builder.Build()
                 .AsEnumerable()
-                .Where(pair => !string.IsNullOrEmpty(pair.Value))
-                .OrderBy(pair => pair.Key);
+                .Where(pair => exportEmptyParams || !string.IsNullOrEmpty(pair.Value))
+                .Select(pair => new KeyValuePair<string, string?>(pair.Key.Replace(":", "__"), pair.Value))
+                .OrderBy(pair => pair.Key)
+                .Select(pair => $"{pair.Key}={pair.Value}");
 
-            var convertedSettings = new StringBuilder();
+            var plainSettings = string.Join(Environment.NewLine, keyPairs);
 
-            foreach ((string key, string? value) in keyPairs)
-            {
-                convertedSettings
-                    .AppendFormat("{0}={1}", key.Replace(":", "__"), value)
-                    .AppendLine();
-            }
-
-            await Console.Out.WriteAsync(convertedSettings.ToString());
+            await Console.Out.WriteAsync(plainSettings);
         }
 
     }
